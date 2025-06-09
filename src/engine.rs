@@ -1,0 +1,200 @@
+use crate::account::Account;
+use crate::error::EngineError;
+use crate::transaction::{Transaction, TransactionType};
+use rust_decimal::Decimal;
+use std::collections::HashMap;
+use std::fs::File;
+
+#[derive(Debug)]
+pub struct TransactionEngine {
+    accounts: HashMap<u16, Account>,
+    transaction_history: HashMap<u32, Transaction>,
+}
+
+impl TransactionEngine {
+    pub fn new() -> Self {
+        Self {
+            accounts: HashMap::new(),
+            transaction_history: HashMap::new(),
+        }
+    }
+
+    pub fn process_transactions_from_file(&mut self, file_path: &str) -> Result<(), EngineError> {
+        let file = File::open(file_path)?;
+        let mut rdr = csv::ReaderBuilder::new()
+            .trim(csv::Trim::All)
+            .from_reader(file);
+
+        for result in rdr.deserialize() {
+            let transaction: Transaction = result?;
+            self.process_transaction(transaction)?;
+        }
+
+        Ok(())
+    }
+
+    fn process_transaction(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+        // Validate transaction
+        self.validate_transaction(&transaction)?;
+
+        match transaction.transaction_type {
+            TransactionType::Deposit => self.process_deposit(transaction),
+            TransactionType::Withdrawal => self.process_withdrawal(transaction),
+            TransactionType::Dispute => self.process_dispute(transaction),
+            TransactionType::Resolve => self.process_resolve(transaction),
+            TransactionType::Chargeback => self.process_chargeback(transaction),
+        }
+    }
+
+    fn validate_transaction(&self, transaction: &Transaction) -> Result<(), EngineError> {
+        // Check if transaction requires amount but doesn't have one
+        if transaction.requires_amount() && transaction.amount.is_none() {
+            return Err(EngineError::InvalidTransaction(
+                "Deposit and withdrawal transactions must have an amount".to_string(),
+            ));
+        }
+
+        // Check if dispute-related transaction has an amount (it shouldn't)
+        if transaction.is_dispute_related() && transaction.amount.is_some() {
+            return Err(EngineError::InvalidTransaction(
+                "Dispute, resolve, and chargeback transactions should not have an amount".to_string(),
+            ));
+        }
+
+        // Check for negative amounts
+        if let Some(amount) = transaction.amount {
+            if amount <= Decimal::ZERO {
+                return Err(EngineError::InvalidTransaction(
+                    "Transaction amount must be positive".to_string(),
+                ));
+            }
+        }
+
+        // Check for duplicate transaction IDs for deposit/withdrawal
+        if matches!(transaction.transaction_type, TransactionType::Deposit | TransactionType::Withdrawal) {
+            if self.transaction_history.contains_key(&transaction.tx) {
+                return Err(EngineError::InvalidTransaction(
+                    format!("Duplicate transaction ID: {}", transaction.tx),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn process_deposit(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+        let amount = transaction.amount.unwrap(); // Safe because we validated
+        let account = self.accounts.entry(transaction.client).or_insert_with(|| Account::new(transaction.client));
+        
+        account.deposit(amount).map_err(|e| EngineError::AccountError(e.to_string()))?;
+        
+        // Store transaction for potential disputes
+        self.transaction_history.insert(transaction.tx, transaction);
+        Ok(())
+    }
+
+    fn process_withdrawal(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+        let amount = transaction.amount.unwrap(); // Safe because we validated
+        let account = self.accounts.entry(transaction.client).or_insert_with(|| Account::new(transaction.client));
+        
+        account.withdraw(amount).map_err(|e| EngineError::AccountError(e.to_string()))?;
+        
+        // Store transaction for potential disputes
+        self.transaction_history.insert(transaction.tx, transaction);
+        Ok(())
+    }
+
+    fn process_dispute(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+        // Find the original transaction
+        let original_transaction = self.transaction_history.get(&transaction.tx)
+            .ok_or_else(|| EngineError::InvalidTransaction(
+                format!("Cannot dispute non-existent transaction: {}", transaction.tx)
+            ))?;
+
+        // Verify client matches
+        if original_transaction.client != transaction.client {
+            return Err(EngineError::InvalidTransaction(
+                "Cannot dispute transaction from different client".to_string(),
+            ));
+        }
+
+        // Only deposits can be disputed
+        if !matches!(original_transaction.transaction_type, TransactionType::Deposit) {
+            return Err(EngineError::InvalidTransaction(
+                "Only deposit transactions can be disputed".to_string(),
+            ));
+        }
+
+        let amount = original_transaction.amount.unwrap();
+        let account = self.accounts.get_mut(&transaction.client)
+            .ok_or_else(|| EngineError::AccountError("Account not found".to_string()))?;
+
+        account.dispute(amount, transaction.tx).map_err(|e| EngineError::AccountError(e.to_string()))?;
+        Ok(())
+    }
+
+    fn process_resolve(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+        // Find the original transaction
+        let original_transaction = self.transaction_history.get(&transaction.tx)
+            .ok_or_else(|| EngineError::InvalidTransaction(
+                format!("Cannot resolve non-existent transaction: {}", transaction.tx)
+            ))?;
+
+        // Verify client matches
+        if original_transaction.client != transaction.client {
+            return Err(EngineError::InvalidTransaction(
+                "Cannot resolve transaction from different client".to_string(),
+            ));
+        }
+
+        let amount = original_transaction.amount.unwrap();
+        let account = self.accounts.get_mut(&transaction.client)
+            .ok_or_else(|| EngineError::AccountError("Account not found".to_string()))?;
+
+        account.resolve(amount, transaction.tx).map_err(|e| EngineError::AccountError(e.to_string()))?;
+        Ok(())
+    }
+
+    fn process_chargeback(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+        // Find the original transaction
+        let original_transaction = self.transaction_history.get(&transaction.tx)
+            .ok_or_else(|| EngineError::InvalidTransaction(
+                format!("Cannot chargeback non-existent transaction: {}", transaction.tx)
+            ))?;
+
+        // Verify client matches
+        if original_transaction.client != transaction.client {
+            return Err(EngineError::InvalidTransaction(
+                "Cannot chargeback transaction from different client".to_string(),
+            ));
+        }
+
+        let amount = original_transaction.amount.unwrap();
+        let account = self.accounts.get_mut(&transaction.client)
+            .ok_or_else(|| EngineError::AccountError("Account not found".to_string()))?;
+
+        account.chargeback(amount, transaction.tx).map_err(|e| EngineError::AccountError(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn output_account_balances(&mut self) -> Result<(), EngineError> {
+        let mut wtr = csv::Writer::from_writer(std::io::stdout());
+        
+        // Round all account balances to 4 decimal places
+        for account in self.accounts.values_mut() {
+            account.round_to_four_decimals();
+        }
+        
+        // Sort accounts by client ID for consistent output
+        let mut sorted_accounts: Vec<_> = self.accounts.values().collect();
+        sorted_accounts.sort_by_key(|account| account.client);
+        
+        for account in sorted_accounts {
+            wtr.serialize(account)?;
+        }
+        
+        wtr.flush()?;
+        Ok(())
+    }
+}
+
