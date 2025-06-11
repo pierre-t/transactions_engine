@@ -1,4 +1,5 @@
 use std::fmt;
+use crate::account::AccountError;
 
 #[derive(Debug)]
 pub enum EngineError {
@@ -33,3 +34,8 @@ impl From<csv::Error> for EngineError {
     }
 }
 
+impl From<AccountError> for EngineError {
+    fn from(err: AccountError) -> Self {
+        EngineError::AccountError(err.as_str().to_string())
+    }
+}

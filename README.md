@@ -8,7 +8,7 @@ A Rust-based financial transactions processing engine that handles deposits, wit
 - **Account Management**: Tracks available, held, total balances and locked status
 - **Precise Arithmetic**: Uses `rust_decimal` for exact financial calculations (4 decimal places)
 - **CSV Input/Output**: Reads transactions from a CSV file, outputs account balances to `stdout` in a CSV format
-- **Error Handling**: Fails completely on invalid transactions
+- **Error Handling**: Fails completely on invalid CSV file, ignores invalid transactions
 
 ## Usage
 
@@ -106,12 +106,14 @@ cargo run -- example.csv
 
 ## Error Handling
 
-The engine fails completely on any invalid transaction, including:
-- Insufficient funds for withdrawals
+The engine fails completely on an invalid CSV file or if a transaction row doesn't have the required information, such as:
 - Invalid transaction types
 - Missing amounts for deposits/withdrawals
 - Amounts provided for dispute-related transactions
 - Negative amounts
+
+The engine will ignore correctly formed transactions that are invalid, such as:
+- Insufficient funds for withdrawals
 - Duplicate transaction IDs (for deposits/withdrawals)
 - Operations on locked accounts (except chargebacks)
 - Invalid dispute operations (wrong client, non-existent transactions, etc.)
@@ -123,5 +125,4 @@ The engine fails completely on any invalid transaction, including:
 - `transaction.rs`: Transaction type
 - `account.rs`: Account management and balance operations
 - `engine.rs`: Main transaction processing engine
-- `error.rs`: Engine error type
-
+- `engine_error.rs`: Engine error type

@@ -1,10 +1,10 @@
 mod engine;
 mod account;
 mod transaction;
-pub mod error;
+pub mod engine_error;
 
 use engine::TransactionEngine;
-use error::EngineError;
+use engine_error::EngineError;
 
 pub fn run(input_file: &String) -> Result<(), EngineError> {
     let mut engine = TransactionEngine::new();

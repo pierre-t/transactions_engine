@@ -2,6 +2,25 @@ use rust_decimal::Decimal;
 use serde::Serialize;
 use std::collections::HashSet;
 
+#[derive(Debug)]
+pub enum AccountError {
+    AccountLocked,
+    InsufficientFunds,
+    TransactionAlreadyDisputed,
+    TransactionNotDisputed,
+}
+
+impl AccountError {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AccountError::AccountLocked => "Account is locked",
+            AccountError::InsufficientFunds => "Insufficient funds",
+            AccountError::TransactionAlreadyDisputed => "Transaction already disputed",
+            AccountError::TransactionNotDisputed => "Transaction not disputed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Account {
     pub client: u16,
@@ -25,9 +44,9 @@ impl Account {
         }
     }
 
-    pub fn deposit(&mut self, amount: Decimal) -> Result<(), &'static str> {
+    pub fn deposit(&mut self, amount: Decimal) -> Result<(), AccountError> {
         if self.locked {
-            return Err("Account is locked");
+            return Err(AccountError::AccountLocked);
         }
         
         self.available += amount;
@@ -35,13 +54,13 @@ impl Account {
         Ok(())
     }
 
-    pub fn withdraw(&mut self, amount: Decimal) -> Result<(), &'static str> {
+    pub fn withdraw(&mut self, amount: Decimal) -> Result<(), AccountError> {
         if self.locked {
-            return Err("Account is locked");
+            return Err(AccountError::AccountLocked);
         }
         
         if self.available < amount {
-            return Err("Insufficient funds");
+            return Err(AccountError::InsufficientFunds);
         }
         
         self.available -= amount;
@@ -49,17 +68,18 @@ impl Account {
         Ok(())
     }
 
-    pub fn dispute(&mut self, amount: Decimal, tx_id: u32) -> Result<(), &'static str> {
+    pub fn dispute(&mut self, mut amount: Decimal, tx_id: u32) -> Result<(), AccountError> {
         if self.locked {
-            return Err("Account is locked");
+            return Err(AccountError::AccountLocked);
         }
         
+        // Adjust amount to available if insufficient
         if self.available < amount {
-            return Err("Insufficient available funds to dispute");
+            amount = self.available;
         }
         
         if self.disputed_transactions.contains(&tx_id) {
-            return Err("Transaction already disputed");
+            return Err(AccountError::TransactionAlreadyDisputed);
         }
         
         self.available -= amount;
@@ -68,18 +88,16 @@ impl Account {
         Ok(())
     }
 
-    pub fn resolve(&mut self, amount: Decimal, tx_id: u32) -> Result<(), &'static str> {
+    pub fn resolve(&mut self, amount: Decimal, tx_id: u32) -> Result<(), AccountError> {
         if self.locked {
-            return Err("Account is locked");
+            return Err(AccountError::AccountLocked);
         }
         
         if !self.disputed_transactions.contains(&tx_id) {
-            return Err("Transaction not disputed");
+            return Err(AccountError::TransactionNotDisputed);
         }
         
-        if self.held < amount {
-            return Err("Insufficient held funds");
-        }
+        assert!(amount <= self.held, "Invalid amount for resolution");
         
         self.held -= amount;
         self.available += amount;
@@ -87,14 +105,12 @@ impl Account {
         Ok(())
     }
 
-    pub fn chargeback(&mut self, amount: Decimal, tx_id: u32) -> Result<(), &'static str> {
+    pub fn chargeback(&mut self, amount: Decimal, tx_id: u32) -> Result<(), AccountError> {
         if !self.disputed_transactions.contains(&tx_id) {
-            return Err("Transaction not disputed");
+            return Err(AccountError::TransactionNotDisputed);
         }
         
-        if self.held < amount {
-            return Err("Insufficient held funds");
-        }
+        assert!(amount <= self.held, "Invalid amount for chargeback");
         
         self.held -= amount;
         self.total -= amount;

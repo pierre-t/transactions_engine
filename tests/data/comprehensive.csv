@@ -17,3 +17,7 @@ deposit,3,10,100.0
 deposit,3,11,200.0
 dispute,3,10,
 withdrawal,4,102,1000.0
+deposit,43,12,1000.0
+withdrawal,43,13,500.5000000001
+deposit,44,14,1000.0
+withdrawal,44,15,500.5000999

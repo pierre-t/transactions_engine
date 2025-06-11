@@ -1,5 +1,5 @@
 use crate::account::Account;
-use crate::error::EngineError;
+use crate::engine_error::EngineError;
 use crate::transaction::{Transaction, TransactionType};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
@@ -37,13 +37,19 @@ impl TransactionEngine {
         // Validate transaction
         self.validate_transaction(&transaction)?;
 
-        match transaction.transaction_type {
-            TransactionType::Deposit => self.process_deposit(transaction),
-            TransactionType::Withdrawal => self.process_withdrawal(transaction),
-            TransactionType::Dispute => self.process_dispute(transaction),
-            TransactionType::Resolve => self.process_resolve(transaction),
-            TransactionType::Chargeback => self.process_chargeback(transaction),
+        let res = match transaction.transaction_type {
+            TransactionType::Deposit => self.process_deposit(&transaction),
+            TransactionType::Withdrawal => self.process_withdrawal(&transaction),
+            TransactionType::Dispute => self.process_dispute(&transaction),
+            TransactionType::Resolve => self.process_resolve(&transaction),
+            TransactionType::Chargeback => self.process_chargeback(&transaction),
+        };
+
+        if let Err(e) = res {
+            // Log the error but continue processing other transactions
+            eprintln!("Ignoring error while processing transaction {}: {}", transaction.tx, e);
         }
+        Ok(())
     }
 
     fn validate_transaction(&self, transaction: &Transaction) -> Result<(), EngineError> {
@@ -82,29 +88,29 @@ impl TransactionEngine {
         Ok(())
     }
 
-    fn process_deposit(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+    fn process_deposit(&mut self, transaction: &Transaction) -> Result<(), EngineError> {
         let amount = transaction.amount.unwrap(); // Safe because we validated
         let account = self.accounts.entry(transaction.client).or_insert_with(|| Account::new(transaction.client));
         
-        account.deposit(amount).map_err(|e| EngineError::AccountError(e.to_string()))?;
+        account.deposit(amount)?;
         
         // Store transaction for potential disputes
-        self.transaction_history.insert(transaction.tx, transaction);
+        self.transaction_history.insert(transaction.tx, transaction.clone());
         Ok(())
     }
 
-    fn process_withdrawal(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+    fn process_withdrawal(&mut self, transaction: &Transaction) -> Result<(), EngineError> {
         let amount = transaction.amount.unwrap(); // Safe because we validated
         let account = self.accounts.entry(transaction.client).or_insert_with(|| Account::new(transaction.client));
         
-        account.withdraw(amount).map_err(|e| EngineError::AccountError(e.to_string()))?;
+        account.withdraw(amount)?;
         
         // Store transaction for potential disputes
-        self.transaction_history.insert(transaction.tx, transaction);
+        self.transaction_history.insert(transaction.tx, transaction.clone());
         Ok(())
     }
 
-    fn process_dispute(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+    fn process_dispute(&mut self, transaction: &Transaction) -> Result<(), EngineError> {
         // Find the original transaction
         let original_transaction = self.transaction_history.get(&transaction.tx)
             .ok_or_else(|| EngineError::InvalidTransaction(
@@ -129,11 +135,11 @@ impl TransactionEngine {
         let account = self.accounts.get_mut(&transaction.client)
             .ok_or_else(|| EngineError::AccountError("Account not found".to_string()))?;
 
-        account.dispute(amount, transaction.tx).map_err(|e| EngineError::AccountError(e.to_string()))?;
+        account.dispute(amount, transaction.tx)?;
         Ok(())
     }
 
-    fn process_resolve(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+    fn process_resolve(&mut self, transaction: &Transaction) -> Result<(), EngineError> {
         // Find the original transaction
         let original_transaction = self.transaction_history.get(&transaction.tx)
             .ok_or_else(|| EngineError::InvalidTransaction(
@@ -151,11 +157,11 @@ impl TransactionEngine {
         let account = self.accounts.get_mut(&transaction.client)
             .ok_or_else(|| EngineError::AccountError("Account not found".to_string()))?;
 
-        account.resolve(amount, transaction.tx).map_err(|e| EngineError::AccountError(e.to_string()))?;
+        account.resolve(amount, transaction.tx)?;
         Ok(())
     }
 
-    fn process_chargeback(&mut self, transaction: Transaction) -> Result<(), EngineError> {
+    fn process_chargeback(&mut self, transaction: &Transaction) -> Result<(), EngineError> {
         // Find the original transaction
         let original_transaction = self.transaction_history.get(&transaction.tx)
             .ok_or_else(|| EngineError::InvalidTransaction(
@@ -173,7 +179,7 @@ impl TransactionEngine {
         let account = self.accounts.get_mut(&transaction.client)
             .ok_or_else(|| EngineError::AccountError("Account not found".to_string()))?;
 
-        account.chargeback(amount, transaction.tx).map_err(|e| EngineError::AccountError(e.to_string()))?;
+        account.chargeback(amount, transaction.tx)?;
         Ok(())
     }
 

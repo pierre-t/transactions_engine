@@ -10,6 +10,18 @@ fn test_transactions_basic() {
 #[test]
 fn test_transactions_comprehensive() {
     run_success_test("comprehensive");
+    run_success_test("repeated_dispute");
+    run_success_test("repeated_chargeback");
+}
+
+#[test]
+fn test_transactions_failed() {
+    run_success_test("withdrawal_fail");
+    run_success_test("deposit_fail");
+    run_success_test("dispute_fail");
+    run_success_test("resolve_fail");
+    run_success_test("chargeback_fail");
+    run_success_test("account_locked");
 }
 
 #[test]
@@ -28,6 +40,7 @@ fn test_invalid_tx_error() {
     run_error_test("invalid_no_amount");
     run_error_test("invalid_unexpected_amount");
     run_error_test("invalid_negative_amount");
+    run_error_test("invalid_duplicate_id");
 }
 
 fn run_success_test(test_name: &str) {
@@ -39,8 +52,8 @@ fn run_success_test(test_name: &str) {
     assert!(Path::new(&expected_file).exists(), "Expected file not found: {}", expected_file);
     
     // Run the binary with the test input
-    let output = Command::new("cargo")
-        .args(["run", "--", &input_file])
+    let output = Command::new(env!("CARGO_BIN_EXE_transactions_engine"))
+        .arg(&input_file)
         .output()
         .expect("Failed to execute binary");
     
@@ -66,8 +79,8 @@ fn run_error_test(test_name: &str) {
     assert!(Path::new(&input_file).exists(), "Input file not found: {}", input_file);
 
     // Run the binary with the test input
-    let output = Command::new("cargo")
-        .args(["run", "--", &input_file])
+    let output = Command::new(env!("CARGO_BIN_EXE_transactions_engine"))
+        .arg(&input_file)
         .output()
         .expect("Failed to execute binary");
     
