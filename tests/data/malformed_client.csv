@@ -1,0 +1,2 @@
+type,client,tx,amount
+deposit,invalid_client,1,200.0
