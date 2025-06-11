@@ -1,6 +1,6 @@
 use rust_decimal::Decimal;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum AccountError {
@@ -29,7 +29,7 @@ pub struct Account {
     pub total: Decimal,
     pub locked: bool,
     #[serde(skip)]
-    pub disputed_transactions: HashSet<u32>,
+    pub disputed_transactions: HashMap<u32, Decimal>,
 }
 
 impl Account {
@@ -40,7 +40,7 @@ impl Account {
             held: Decimal::ZERO,
             total: Decimal::ZERO,
             locked: false,
-            disputed_transactions: HashSet::new(),
+            disputed_transactions: HashMap::new(),
         }
     }
 
@@ -73,31 +73,30 @@ impl Account {
             return Err(AccountError::AccountLocked);
         }
         
+        if self.disputed_transactions.contains_key(&tx_id) {
+            return Err(AccountError::TransactionAlreadyDisputed);
+        }
+        
         // Adjust amount to available if insufficient
         if self.available < amount {
             amount = self.available;
-        }
-        
-        if self.disputed_transactions.contains(&tx_id) {
-            return Err(AccountError::TransactionAlreadyDisputed);
+            eprintln!("Disputing transaction {} with not enough balance available, holding amount {} instead",
+                      tx_id, amount);
         }
         
         self.available -= amount;
         self.held += amount;
-        self.disputed_transactions.insert(tx_id);
+        self.disputed_transactions.insert(tx_id, amount);
         Ok(())
     }
 
-    pub fn resolve(&mut self, amount: Decimal, tx_id: u32) -> Result<(), AccountError> {
+    pub fn resolve(&mut self, tx_id: u32) -> Result<(), AccountError> {
         if self.locked {
             return Err(AccountError::AccountLocked);
         }
         
-        if !self.disputed_transactions.contains(&tx_id) {
-            return Err(AccountError::TransactionNotDisputed);
-        }
-        
-        assert!(amount <= self.held, "Invalid amount for resolution");
+        let amount = self.disputed_transactions.get(&tx_id)
+            .ok_or(AccountError::TransactionNotDisputed)?;
         
         self.held -= amount;
         self.available += amount;
@@ -105,12 +104,9 @@ impl Account {
         Ok(())
     }
 
-    pub fn chargeback(&mut self, amount: Decimal, tx_id: u32) -> Result<(), AccountError> {
-        if !self.disputed_transactions.contains(&tx_id) {
-            return Err(AccountError::TransactionNotDisputed);
-        }
-        
-        assert!(amount <= self.held, "Invalid amount for chargeback");
+    pub fn chargeback(&mut self, tx_id: u32) -> Result<(), AccountError> {
+        let amount = self.disputed_transactions.get(&tx_id)
+            .ok_or(AccountError::TransactionNotDisputed)?;
         
         self.held -= amount;
         self.total -= amount;
@@ -174,7 +170,7 @@ mod tests {
         
         account.deposit(amount).unwrap();
         account.dispute(amount, 1).unwrap();
-        assert!(account.resolve(amount, 1).is_ok());
+        assert!(account.resolve(1).is_ok());
         assert_eq!(account.available, amount);
         assert_eq!(account.held, Decimal::ZERO);
         assert_eq!(account.total, amount);
@@ -187,7 +183,7 @@ mod tests {
         
         account.deposit(amount).unwrap();
         account.dispute(amount, 1).unwrap();
-        assert!(account.chargeback(amount, 1).is_ok());
+        assert!(account.chargeback(1).is_ok());
         assert_eq!(account.available, Decimal::ZERO);
         assert_eq!(account.held, Decimal::ZERO);
         assert_eq!(account.total, Decimal::ZERO);
@@ -209,7 +205,7 @@ mod tests {
         
         account.deposit(amount).unwrap();
         account.dispute(amount, 1).unwrap();
-        account.chargeback(amount, 1).unwrap();
+        account.chargeback(1).unwrap();
         
         // Account is now locked, operations should fail
         assert!(account.deposit(amount).is_err());

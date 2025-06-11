@@ -153,11 +153,10 @@ impl TransactionEngine {
             ));
         }
 
-        let amount = original_transaction.amount.unwrap();
         let account = self.accounts.get_mut(&transaction.client)
             .ok_or_else(|| EngineError::AccountError("Account not found".to_string()))?;
 
-        account.resolve(amount, transaction.tx)?;
+        account.resolve(transaction.tx)?;
         Ok(())
     }
 
@@ -175,11 +174,10 @@ impl TransactionEngine {
             ));
         }
 
-        let amount = original_transaction.amount.unwrap();
         let account = self.accounts.get_mut(&transaction.client)
             .ok_or_else(|| EngineError::AccountError("Account not found".to_string()))?;
 
-        account.chargeback(amount, transaction.tx)?;
+        account.chargeback(transaction.tx)?;
         Ok(())
     }
 

@@ -106,17 +106,25 @@ cargo run -- example.csv
 
 ## Error Handling
 
+### Failure scenarios
 The engine fails completely on an invalid CSV file or if a transaction row doesn't have the required information, such as:
 - Invalid transaction types
 - Missing amounts for deposits/withdrawals
 - Amounts provided for dispute-related transactions
 - Negative amounts
 
+### Invalid transactions
 The engine will ignore correctly formed transactions that are invalid, such as:
 - Insufficient funds for withdrawals
 - Duplicate transaction IDs (for deposits/withdrawals)
 - Operations on locked accounts (except chargebacks)
 - Invalid dispute operations (wrong client, non-existent transactions, etc.)
+
+### Dispute when the amount is not available anymore
+If a dispute is made when the amount available is not enough to cover for the original transaction amount, then we put on hold the maximum available amount possible.
+When resolving that transaction, the amount previously held will be credited back to the account (not the original transaction amount).
+When charging back that transaction, the amount previously held will be debited from the account. Even if at that point the available amount (or held amount) is enough to cover the original transaction amount, we still only debit the amount that was put on hold at the time of the dispute of the transaction.
+See `tests/data/dispute_after_withdrawal.csv` for an example of such a case.
 
 ## Architecture
 
