@@ -18,7 +18,7 @@ for ((i=1; i<=NUM_TRANSACTIONS; i++)); do
     TYPES=("deposit" "withdrawal" "dispute" "resolve" "chargeback")
     TYPE=${TYPES[$((RANDOM % ${#TYPES[@]}))]}
     
-    # Random client ID (0 - u16::MAX)
+    # Random client ID (0 - 50)
     CLIENT=$((RANDOM % 50))
     
     # Sequential transaction ID
