@@ -13,7 +13,7 @@ A Rust-based financial transactions processing engine that handles deposits, wit
 ## Usage
 
 ```bash
-cargo run <input.csv>
+cargo run -- <input.csv>
 ```
 
 ### Input Format (CSV)
@@ -102,6 +102,12 @@ cargo test
 Run with the provided test file:
 ```bash
 cargo run -- example.csv
+```
+
+You can generate a file with random transactions using the `generate_rand_tx.sh` script:
+```bash
+./generate_rand_tx.sh 50 > random.csv
+cargo run -- random.csv
 ```
 
 ## Error Handling
