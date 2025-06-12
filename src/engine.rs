@@ -1,9 +1,11 @@
 use crate::account::Account;
 use crate::engine_error::EngineError;
 use crate::transaction::{Transaction, TransactionType};
+use csv::{Reader, Writer};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
-use std::fs::File;
+use std::io::Read;
+use std::io::Write;
 
 #[derive(Debug)]
 pub struct TransactionEngine {
@@ -19,13 +21,8 @@ impl TransactionEngine {
         }
     }
 
-    pub fn process_transactions_from_file(&mut self, file_path: &str) -> Result<(), EngineError> {
-        let file = File::open(file_path)?;
-        let mut rdr = csv::ReaderBuilder::new()
-            .trim(csv::Trim::All)
-            .from_reader(file);
-
-        for result in rdr.deserialize() {
+    pub fn process_transactions_from_reader<R: Read>(&mut self, reader: &mut Reader<R>) -> Result<(), EngineError> {
+        for result in reader.deserialize() {
             let transaction: Transaction = result?;
             self.process_transaction(transaction)?;
         }
@@ -181,23 +178,16 @@ impl TransactionEngine {
         Ok(())
     }
 
-    pub fn output_account_balances(&mut self) -> Result<(), EngineError> {
-        let mut wtr = csv::Writer::from_writer(std::io::stdout());
-        
-        // Round all account balances to 4 decimal places
-        for account in self.accounts.values_mut() {
-            account.round_to_four_decimals();
-        }
-        
+    pub fn output_account_balances_to_writer<W: Write>(&mut self, writer: &mut Writer<W>) -> Result<(), EngineError> {
         // Sort accounts by client ID for consistent output
         let mut sorted_accounts: Vec<_> = self.accounts.values().collect();
         sorted_accounts.sort_by_key(|account| account.client);
         
         for account in sorted_accounts {
-            wtr.serialize(account)?;
+            writer.serialize(account)?;
         }
         
-        wtr.flush()?;
+        writer.flush()?;
         Ok(())
     }
 }

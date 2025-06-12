@@ -1,7 +1,15 @@
 use std::env;
 use std::process;
+use std::fs::File;
 
-use transactions_engine::engine_error::EngineError;
+mod engine;
+mod account;
+mod transaction;
+mod engine_error;
+
+use engine::TransactionEngine;
+use engine_error::EngineError;
+
 
 fn main() -> Result<(), EngineError> {
     let args: Vec<String> = env::args().collect();
@@ -12,5 +20,22 @@ fn main() -> Result<(), EngineError> {
     }
 
     let input_file = &args[1];
-    transactions_engine::run(input_file)
+    run(input_file)
+}
+
+fn run(input_file: &String) -> Result<(), EngineError> {
+    let mut engine = TransactionEngine::new();
+
+    let file = File::open(input_file)?;
+    let mut rdr = csv::ReaderBuilder::new()
+        .trim(csv::Trim::All)
+        .from_reader(file);
+
+    engine.process_transactions_from_reader(&mut rdr)?;
+
+    let mut wtr = csv::Writer::from_writer(std::io::stdout());
+
+    engine.output_account_balances_to_writer(&mut wtr)?;
+
+    Ok(())
 }

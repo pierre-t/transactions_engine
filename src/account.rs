@@ -1,5 +1,6 @@
 use rust_decimal::Decimal;
 use serde::Serialize;
+use serde::Serializer;
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -21,11 +22,22 @@ impl AccountError {
     }
 }
 
+// Serialize Decimal with rounding to 4 decimal places
+fn serialize_rounded<S>(value: &Decimal, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&value.round_dp(4).to_string())
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Account {
     pub client: u16,
+    #[serde(serialize_with = "serialize_rounded")]
     pub available: Decimal,
+    #[serde(serialize_with = "serialize_rounded")]
     pub held: Decimal,
+    #[serde(serialize_with = "serialize_rounded")]
     pub total: Decimal,
     pub locked: bool,
     #[serde(skip)]
@@ -113,12 +125,6 @@ impl Account {
         self.locked = true;
         self.disputed_transactions.remove(&tx_id);
         Ok(())
-    }
-
-    pub fn round_to_four_decimals(&mut self) {
-        self.available = self.available.round_dp(4);
-        self.held = self.held.round_dp(4);
-        self.total = self.total.round_dp(4);
     }
 }
 
@@ -210,15 +216,5 @@ mod tests {
         // Account is now locked, operations should fail
         assert!(account.deposit(amount).is_err());
         assert!(account.withdraw(amount).is_err());
-    }
-
-    #[test]
-    fn test_precision() {
-        let mut account = Account::new(1);
-        let amount = Decimal::from_str("10.12345").unwrap();
-        
-        account.deposit(amount).unwrap();
-        account.round_to_four_decimals();
-        assert_eq!(account.available, Decimal::from_str("10.1234").unwrap());
     }
 }
