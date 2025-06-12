@@ -1,0 +1,5 @@
+client,available,held,total,locked
+1,3000000700,0,3000000700,true
+2,1000,0,1000,false
+9988,9988.77,0,9988.77,false
+65535,999.8889,0,999.8889,false

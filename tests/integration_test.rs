@@ -10,6 +10,7 @@ fn test_transactions_basic() {
 #[test]
 fn test_transactions_comprehensive() {
     run_success_test("comprehensive");
+    run_success_test("non_consecutive_ids");
     run_success_test("repeated_dispute");
     run_success_test("repeated_chargeback");
     run_success_test("dispute_after_withdrawal");
